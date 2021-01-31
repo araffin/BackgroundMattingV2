@@ -127,16 +127,22 @@ class Displayer:
 
 
 
-if 'float16' in args.model_checkpoint:
+if 'fp16' in args.model_checkpoint and not args.model_type == "jit":
     precision = torch.float16
 else:
     precision = torch.float32
+
+
 
 # --------------- Main ---------------
 
 torch.set_num_threads(args.num_threads)
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
+
+print(f"Using {args.num_threads} threads")
+print(f"Using {precision} precision")
+print(f"Using {device} device")
 
 # Load model
 if args.model_type == 'mattingbase':
