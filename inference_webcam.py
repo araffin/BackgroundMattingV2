@@ -30,6 +30,11 @@ from PIL import Image
 from dataset import VideoDataset
 from model import MattingBase, MattingRefine
 
+try:
+    from jetcam.csi_camera import CSICamera
+except ImportError:
+    CSICamera = None
+
 
 # --------------- Arguments ---------------
 
@@ -43,6 +48,7 @@ parser.add_argument('--model-checkpoint', type=str, required=True)
 parser.add_argument('--model-refine-mode', type=str, default='sampling', choices=['full', 'sampling', 'thresholding'])
 parser.add_argument('--model-refine-sample-pixels', type=int, default=80_000)
 parser.add_argument('--model-refine-threshold', type=float, default=0.7)
+parser.add_argument('--num-threads', type=int, default=4)
 
 parser.add_argument('--hide-fps', action='store_true')
 parser.add_argument('--resolution', type=int, nargs=2, metavar=('width', 'height'), default=(1280, 720))
@@ -120,9 +126,17 @@ class Displayer:
         return cv2.waitKey(1) & 0xFF
 
 
+
+if 'float16' in args.model_checkpoint:
+    precision = torch.float16
+else:
+    precision = torch.float32
+
 # --------------- Main ---------------
 
-torch.set_num_threads(4)
+torch.set_num_threads(args.num_threads)
+
+device = "cuda" if torch.cuda.is_available() else "cpu"
 
 # Load model
 if args.model_type == 'mattingbase':
@@ -135,24 +149,27 @@ if args.model_type == 'mattingrefine':
         args.model_refine_sample_pixels,
         args.model_refine_threshold)
 
-# model = model.cuda().eval()
 if args.model_type == "jit":
     model = torch.jit.load(args.model_checkpoint)
-    precision = torch.float16
 else:
-    model.eval()
-    model.load_state_dict(torch.load(args.model_checkpoint, map_location=torch.device('cpu')), strict=False)
-    precision = torch.float32
+    model.load_state_dict(torch.load(args.model_checkpoint, map_location=device), strict=False)
+
+model = model.eval().to(device=device, dtype=precision)
 
 
 width, height = args.resolution
-cam = Camera(width=width, height=height)
+
+if CSICamera is None:
+    cam = Camera(width=width, height=height)
+else:
+    cam = CSICamera(width=width, height=height, capture_width=1080, capture_height=720, capture_fps=30)
+    # cam.running = True
+
 dsp = Displayer('MattingV2', cam.width, cam.height, show_info=(not args.hide_fps))
 
 def cv2_frame_to_cuda(frame):
     frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    # return ToTensor()(Image.fromarray(frame)).unsqueeze_(0).cuda()
-    return ToTensor()(Image.fromarray(frame)).unsqueeze_(0).to(precision)
+    return ToTensor()(Image.fromarray(frame)).unsqueeze_(0).to(device=device, dtype=precision)
 
 with torch.no_grad():
     while True:
@@ -167,12 +184,17 @@ with torch.no_grad():
                 exit()
         while True: # matting
             frame = cam.read()
+            
             src = cv2_frame_to_cuda(frame)
+            
             pha, fgr = model(src, bgr)[:2]
+            
             res = pha * fgr + (1 - pha) * torch.ones_like(fgr)
             res = res.mul(255).byte().cpu().permute(0, 2, 3, 1).numpy()[0]
             res = cv2.cvtColor(res, cv2.COLOR_RGB2BGR)
+            
             key = dsp.step(res)
+
             if key == ord('b'):
                 break
             elif key == ord('q'):
