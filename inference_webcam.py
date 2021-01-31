@@ -36,7 +36,7 @@ from model import MattingBase, MattingRefine
 
 parser = argparse.ArgumentParser(description='Inference from web-cam')
 
-parser.add_argument('--model-type', type=str, required=True, choices=['mattingbase', 'mattingrefine'])
+parser.add_argument('--model-type', type=str, required=True, choices=['mattingbase', 'mattingrefine', 'jit'])
 parser.add_argument('--model-backbone', type=str, required=True, choices=['resnet101', 'resnet50', 'mobilenetv2'])
 parser.add_argument('--model-backbone-scale', type=float, default=0.25)
 parser.add_argument('--model-checkpoint', type=str, required=True)
@@ -122,6 +122,7 @@ class Displayer:
 
 # --------------- Main ---------------
 
+torch.set_num_threads(4)
 
 # Load model
 if args.model_type == 'mattingbase':
@@ -134,8 +135,14 @@ if args.model_type == 'mattingrefine':
         args.model_refine_sample_pixels,
         args.model_refine_threshold)
 
-model = model.cuda().eval()
-model.load_state_dict(torch.load(args.model_checkpoint), strict=False)
+# model = model.cuda().eval()
+if args.model_type == "jit":
+    model = torch.jit.load(args.model_checkpoint)
+    precision = torch.float16
+else:
+    model.eval()
+    model.load_state_dict(torch.load(args.model_checkpoint, map_location=torch.device('cpu')), strict=False)
+    precision = torch.float32
 
 
 width, height = args.resolution
@@ -144,7 +151,8 @@ dsp = Displayer('MattingV2', cam.width, cam.height, show_info=(not args.hide_fps
 
 def cv2_frame_to_cuda(frame):
     frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    return ToTensor()(Image.fromarray(frame)).unsqueeze_(0).cuda()
+    # return ToTensor()(Image.fromarray(frame)).unsqueeze_(0).cuda()
+    return ToTensor()(Image.fromarray(frame)).unsqueeze_(0).to(precision)
 
 with torch.no_grad():
     while True:
