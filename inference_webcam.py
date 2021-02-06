@@ -244,6 +244,7 @@ else:
 dsp = Displayer("MattingV2", cam.width, cam.height, show_info=(not args.hide_fps))
 dsp.fake_cam = fake_cam
 
+
 def cv2_frame_to_cuda(frame):
     frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     return (
@@ -251,6 +252,7 @@ def cv2_frame_to_cuda(frame):
         .unsqueeze_(0)
         .to(device=device, dtype=precision)
     )
+
 
 # Convert to tensorRT
 # if torch2trt is not None:
@@ -260,7 +262,6 @@ def cv2_frame_to_cuda(frame):
 #     # Optional: save it
 #     precision_str = "fp16"
 #     torch.save(model.state_dict(), f'model_trt_{precision_str}.pth')
-
 
 
 with torch.no_grad():
