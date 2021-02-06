@@ -91,10 +91,14 @@ class MattingBase(Base):
         x, *shortcuts = self.backbone(x)
         x = self.aspp(x)
         x = self.decoder(x, *shortcuts)
-        pha = x[:, 0:1].clamp_(0., 1.)
-        fgr = x[:, 1:4].add(src).clamp_(0., 1.)
-        err = x[:, 4:5].clamp_(0., 1.)
-        hid = x[:, 5: ].relu_()
+        # pha = x[:, 0:1].clamp_(0., 1.)
+        # fgr = x[:, 1:4].add(src).clamp_(0., 1.)
+        # err = x[:, 4:5].clamp_(0., 1.)
+        # hid = x[:, 5: ].relu_()
+        pha = torch.clamp(x[:, 0:1], 0., 1.)
+        fgr = torch.clamp(x[:, 1:4] + src, 0., 1.)
+        err = torch.clamp(x[:, 4:5], 0., 1.)
+        hid = torch.relu(x[:, 5: ])
         return pha, fgr, err, hid
 
 
