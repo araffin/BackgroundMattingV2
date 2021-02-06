@@ -14,3 +14,4 @@
 - reduce delay?
 - install vs code / open ssh / ssh copy id / fuzzy finder / git status / ntop ntpupdate
 - jetson camera package
+- jetson_clock and fan on

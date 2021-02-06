@@ -184,7 +184,7 @@ class Displayer:
         return cv2.waitKey(1) & 0xFF
 
 
-if "fp16" in args.model_checkpoint and not args.model_type == "jit":
+if "fp16" in args.model_checkpoint:
     precision = torch.float16
 else:
     precision = torch.float32
