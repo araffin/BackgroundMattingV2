@@ -36,24 +36,13 @@ try:
 except ImportError:
     CSICamera = None
 
-try:
-    import pyfakewebcam
+import trtorch
 
-    # Create fake webcam
-    # sudo modprobe v4l2loopback devices=1
-except ImportError:
-    pyfakewebcam = None
+# try:
+#     from torch2trt import torch2trt
+# except ImportError:
+#     torch2trt = None
 
-
-try:
-    from torch2trt import torch2trt
-except ImportError:
-    torch2trt = None
-
-try:
-    import trtorch
-except ImportError:
-    trtorch = None
 
 # --------------- Arguments ---------------
 
@@ -236,13 +225,7 @@ else:
     )
     # cam.running = True
 
-if pyfakewebcam is not None and args.fake_cam:
-    fake_cam = pyfakewebcam.FakeWebcam("/dev/video1", cam.width, cam.height)
-else:
-    fake_cam = None
-
 dsp = Displayer("MattingV2", cam.width, cam.height, show_info=(not args.hide_fps))
-dsp.fake_cam = fake_cam
 
 def cv2_frame_to_cuda(frame):
     frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -252,51 +235,33 @@ def cv2_frame_to_cuda(frame):
         .to(device=device, dtype=precision)
     )
 
+
+
 # Convert to tensorRT
-# if torch2trt is not None:
-#     with torch.no_grad():
-#         x = cv2_frame_to_cuda(cam.read())
-#         model = torch2trt(model, [x, x])
-#     # Optional: save it
-#     precision_str = "fp16"
-#     torch.save(model.state_dict(), f'model_trt_{precision_str}.pth')
+# not all operations supported :/ 
+if trtorch is not None:
+    with torch.no_grad():
+        x = cv2_frame_to_cuda(cam.read())
+        # model = torch2trt(model, [x, x])
+    print(x.shape)
+    shape = list(x.shape)
+    compile_settings = {
+        "input_shapes": [shape, shape],
+        # "input_shapes": [
+        #     # [shape, shape]
+        #     # {
+        #     #     "min": [1, 3, 224, 224],
+        #     #     "opt": [1, 3, 512, 512],
+        #     #     "max": [1, 3, 1024, 1024]
+        #     # }, # For static size [1, 3, 224, 224]
+        # ],
+        "op_precision": torch.half # Run with FP16
+    }
 
+    # script_model = torch.jit.script(model)
+    traced_model = torch.jit.trace(model, [x, x])
+    trt_ts_module = trtorch.compile(traced_model, compile_settings)
 
-
-with torch.no_grad():
-    while True:
-        bgr = None
-        while True:  # grab bgr
-            frame = cam.read()
-            key = dsp.step(frame)
-            if key == ord("b"):
-                bgr = cv2_frame_to_cuda(cam.read())
-                break
-            elif key == ord("q"):
-                exit()
-        while True:  # matting
-            frame = cam.read()
-
-            src = cv2_frame_to_cuda(frame)
-
-            pha, fgr = model(src, bgr)[:2]
-
-            background_image = torch.ones_like(fgr)
-            if args.background == "blue":
-                background_image[:, :2, :, :] = 0
-            elif args.background == "red":
-                background_image[:, 1:, :, :] = 0
-            elif args.background == "green":
-                background_image[:, 0, :, :] = 0
-                background_image[:, 2, :, :] = 0
-
-            res = pha * fgr + (1 - pha) * background_image
-            res = res.mul(255).byte().cpu().permute(0, 2, 3, 1).numpy()[0]
-            res = cv2.cvtColor(res, cv2.COLOR_RGB2BGR)
-
-            key = dsp.step(res)
-
-            if key == ord("b"):
-                break
-            elif key == ord("q"):
-                exit()
+    x = x.half()
+    result = trt_ts_module(x, x)
+    torch.jit.save(trt_ts_module, "trt_torchscript_module_fp16.ts")

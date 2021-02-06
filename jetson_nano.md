@@ -1,0 +1,16 @@
+- installed bazel from source (java jdk required)
+- do not touch numpy version (seg fault)
+- opencv pre-installed
+- everything in user, no sudo, no virtual env
+- install trtorch (more swap) + change config
+- install pytorch from forum
+- replace unsupported operations
+- stable power supply
+- reduce dimension
+- add green screen
+- add virtual cam
+- add stream to other pc
+- obs studio + chroma key
+- reduce delay?
+- install vs code / open ssh / ssh copy id / fuzzy finder / git status / ntop ntpupdate
+- jetson camera package
