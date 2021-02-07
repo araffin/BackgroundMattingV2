@@ -32,9 +32,9 @@ from dataset import VideoDataset
 from model import MattingBase, MattingRefine
 
 try:
-    from jetcam.csi_camera import CSICamera
+    import nanocamera as nano
 except ImportError:
-    CSICamera = None
+    nano = None
 
 try:
     import pyfakewebcam
@@ -46,7 +46,7 @@ except ImportError:
 
 
 try:
-    from torch2trt import torch2trt
+    from torch2trt import torch2trt, TRTModule
 except ImportError:
     torch2trt = None
 
@@ -64,7 +64,7 @@ parser.add_argument(
     "--model-type",
     type=str,
     required=True,
-    choices=["mattingbase", "mattingrefine", "jit"],
+    choices=["mattingbase", "mattingrefine", "jit", "trt"],
 )
 parser.add_argument(
     "--model-backbone",
@@ -88,11 +88,15 @@ parser.add_argument(
 )
 
 parser.add_argument("--fake-cam", action="store_true")
-
+parser.add_argument("--optimize-trt", action="store_true")
 parser.add_argument("--hide-fps", action="store_true")
 parser.add_argument(
     "--resolution", type=int, nargs=2, metavar=("width", "height"), default=(1280, 720)
 )
+parser.add_argument(
+    "--precision", type=str, default="float32", choices=["float32", "float16"]
+)
+
 args = parser.parse_args()
 
 
@@ -184,7 +188,7 @@ class Displayer:
         return cv2.waitKey(1) & 0xFF
 
 
-if "fp16" in args.model_checkpoint:
+if "fp16" in args.model_checkpoint or args.precision == "float16":
     precision = torch.float16
 else:
     precision = torch.float32
@@ -196,9 +200,11 @@ torch.set_num_threads(args.num_threads)
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
+print(f"Using {args.model_type}")
 print(f"Using {args.num_threads} threads")
 print(f"Using {precision} precision")
 print(f"Using {device} device")
+print(f"Loading {args.model_checkpoint}")
 
 # Load model
 if args.model_type == "mattingbase":
@@ -214,6 +220,10 @@ if args.model_type == "mattingrefine":
 
 if args.model_type == "jit":
     model = torch.jit.load(args.model_checkpoint)
+elif args.model_type == "trt":
+    # not working completely (error with copy of state dict)
+    # model = TRTModule().load_state_dict(torch.jit.load(args.model_checkpoint))
+    model = torch.jit.load(args.model_checkpoint)
 else:
     model.load_state_dict(
         torch.load(args.model_checkpoint, map_location=device), strict=False
@@ -224,17 +234,10 @@ model = model.eval().to(device=device, dtype=precision)
 
 width, height = args.resolution
 
-if CSICamera is None:
+if nano is None:
     cam = Camera(width=width, height=height)
 else:
-    cam = CSICamera(
-        width=width,
-        height=height,
-        capture_width=1080,
-        capture_height=720,
-        capture_fps=30,  # reduce to reduce lag
-    )
-    # cam.running = True
+    cam = nano.Camera(flip=0, width=width, height=height, fps=30)
 
 if pyfakewebcam is not None and args.fake_cam:
     fake_cam = pyfakewebcam.FakeWebcam("/dev/video1", cam.width, cam.height)
@@ -255,13 +258,13 @@ def cv2_frame_to_cuda(frame):
 
 
 # Convert to tensorRT
-# if torch2trt is not None:
-#     with torch.no_grad():
-#         x = cv2_frame_to_cuda(cam.read())
-#         model = torch2trt(model, [x, x], fp16_mode=precision == torch.float16)
-#     # Optional: save it
-#     precision_str = "fp16" if precision == torch.float16 else "fp32"
-#     torch.save(model.state_dict(), f'model_trt_{precision_str}.pth')
+if torch2trt is not None and args.optimize_trt:
+    with torch.no_grad():
+        x = cv2_frame_to_cuda(cam.read())
+        model = torch2trt(model, [x, x], fp16_mode=precision == torch.float16)
+    # Optional: save it
+    precision_str = "fp16" if precision == torch.float16 else "fp32"
+    torch.save(model.state_dict(), f"model_trt_{precision_str}.pth")
 
 
 with torch.no_grad():
