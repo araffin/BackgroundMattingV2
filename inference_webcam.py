@@ -18,7 +18,6 @@ Example:
 import argparse, os, shutil, time
 import cv2
 import torch
-import time
 
 import numpy as np
 from torch import nn
@@ -134,58 +133,6 @@ class Camera:
 
     def __exit__(self, exec_type, exc_value, traceback):
         self.capture.release()
-
-
-class ProcessImage(object):
-    """
-    Class used to retrieve an image from the camera
-    and process it.
-
-    :param camera:
-    :param model:
-    """
-
-    def __init__(self, camera, model, background, bgr, max_fps=30):
-        super().__init__()
-        self.camera = camera
-        self.model = model
-        self.bgr = bgr
-        self._last_frame = self.camera.read()
-        background_image = torch.ones_like(bgr)
-        if background == "blue":
-            background_image[:, :2, :, :] = 0
-        elif background == "red":
-            background_image[:, 1:, :, :] = 0
-        elif background == "green":
-            background_image[:, 0, :, :] = 0
-            background_image[:, 2, :, :] = 0
-        self.background_image = background_image
-        self.frame_lock = Lock()
-        self.started = False
-
-    def start(self):
-        self.thread = Thread(target=self._update, args=())
-        self.thread.daemon = True
-        self.thread.start()
-        self.started = True
-
-    def _update(self):
-        while True:
-            frame = self.camera.read()
-            src = cv2_frame_to_cuda(frame)
-
-            pha, fgr = self.model(src, self.bgr)[:2]
-
-            res = pha * fgr + (1 - pha) * self.background_image
-            res = res.mul(255).byte().cpu().permute(0, 2, 3, 1).numpy()[0]
-            res = cv2.cvtColor(res, cv2.COLOR_RGB2BGR)
-            with self.frame_lock:
-                self._last_frame = res
-
-    @property
-    def last_frame(self):
-        with self.frame_lock:
-            return self._last_frame.copy()
 
 
 # An FPS tracker that computes exponentialy moving average FPS
@@ -321,9 +268,6 @@ if torch2trt is not None and args.optimize_trt:
 
 
 with torch.no_grad():
-    bgr = cv2_frame_to_cuda(cam.read())
-    process_images = ProcessImage(cam, model, args.background, bgr)
-
     while True:
         bgr = None
         while True:  # grab bgr
@@ -334,18 +278,27 @@ with torch.no_grad():
                 break
             elif key == ord("q"):
                 exit()
-
-        process_images.bgr = bgr
-        if not process_images.started:
-            process_images.start()
-
         while True:  # matting
-            # frame = cam.read()
-            res = process_images.last_frame
-            key = dsp.step(res)
+            frame = cam.read()
 
-            # Limit FPS
-            time.sleep(1 / 30.0)
+            src = cv2_frame_to_cuda(frame)
+
+            pha, fgr = model(src, bgr)[:2]
+
+            background_image = torch.ones_like(fgr)
+            if args.background == "blue":
+                background_image[:, :2, :, :] = 0
+            elif args.background == "red":
+                background_image[:, 1:, :, :] = 0
+            elif args.background == "green":
+                background_image[:, 0, :, :] = 0
+                background_image[:, 2, :, :] = 0
+
+            res = pha * fgr + (1 - pha) * background_image
+            res = res.mul(255).byte().cpu().permute(0, 2, 3, 1).numpy()[0]
+            res = cv2.cvtColor(res, cv2.COLOR_RGB2BGR)
+
+            key = dsp.step(res)
 
             if key == ord("b"):
                 break
