@@ -258,9 +258,9 @@ def cv2_frame_to_cuda(frame):
 # if torch2trt is not None:
 #     with torch.no_grad():
 #         x = cv2_frame_to_cuda(cam.read())
-#         model = torch2trt(model, [x, x])
+#         model = torch2trt(model, [x, x], fp16_mode=precision == torch.float16)
 #     # Optional: save it
-#     precision_str = "fp16"
+#     precision_str = "fp16" if precision == torch.float16 else "fp32"
 #     torch.save(model.state_dict(), f'model_trt_{precision_str}.pth')
 
 
