@@ -221,15 +221,15 @@ if args.model_type == "mattingrefine":
 if args.model_type == "jit":
     model = torch.jit.load(args.model_checkpoint)
 elif args.model_type == "trt":
-    # not working completely (error with copy of state dict)
-    # model = TRTModule().load_state_dict(torch.jit.load(args.model_checkpoint))
-    model = torch.jit.load(args.model_checkpoint)
+    # Not working yet
+    model = TRTModule().load_state_dict(torch.load(args.model_checkpoint))
 else:
     model.load_state_dict(
         torch.load(args.model_checkpoint, map_location=device), strict=False
     )
 
-model = model.eval().to(device=device, dtype=precision)
+if args.model_type != "trt":
+    model = model.eval().to(device=device, dtype=precision)
 
 
 width, height = args.resolution
@@ -237,7 +237,8 @@ width, height = args.resolution
 if nano is None:
     cam = Camera(width=width, height=height)
 else:
-    cam = nano.Camera(flip=0, width=width, height=height, fps=30)
+    # See https://picamera.readthedocs.io/en/release-1.13/fov.html
+    cam = nano.Camera(flip=0, width=width, height=height, fps=60, capture_width=640, capture_height=480)
 
 if pyfakewebcam is not None and args.fake_cam:
     fake_cam = pyfakewebcam.FakeWebcam("/dev/video1", cam.width, cam.height)

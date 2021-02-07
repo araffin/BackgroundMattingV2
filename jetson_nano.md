@@ -15,3 +15,9 @@
 - install vs code / open ssh / ssh copy id / fuzzy finder / git status / ntop ntpupdate
 - jetson camera package
 - jetson_clock and fan on
+- changed from jetcam to nanocamera
+- try picamera faster fps (smaller FoV)
+
+TODO:
+- fix lag
+- try optimize with different input shape (include square)

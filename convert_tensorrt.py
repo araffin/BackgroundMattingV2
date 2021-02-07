@@ -242,7 +242,7 @@ def cv2_frame_to_cuda(frame):
 if trtorch is not None:
     with torch.no_grad():
         x = cv2_frame_to_cuda(cam.read())
-        # model = torch2trt(model, [x, x])
+
     print(x.shape)
     shape = list(x.shape)
     compile_settings = {
@@ -255,7 +255,10 @@ if trtorch is not None:
         #     #     "max": [1, 3, 1024, 1024]
         #     # }, # For static size [1, 3, 224, 224]
         # ],
-        "op_precision": torch.half # Run with FP16
+        "op_precision": torch.half, # Run with FP16
+        "num_min_timing_iters": 10, # Default: 2
+        "num_avg_timing_iters": 10, # Default: 1
+        "max_batch_size": 1, # Maximum batch size (must be >= 1 to be set, 0 means not set)
     }
 
     # script_model = torch.jit.script(model)
