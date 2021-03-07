@@ -21,3 +21,4 @@
 TODO:
 - fix lag
 - try optimize with different input shape (include square)
+- use udp for streaming cam

@@ -238,7 +238,7 @@ if nano is None:
     cam = Camera(width=width, height=height)
 else:
     # See https://picamera.readthedocs.io/en/release-1.13/fov.html
-    cam = nano.Camera(flip=0, width=width, height=height, fps=60, capture_width=640, capture_height=480)
+    cam = nano.Camera(flip=0, width=width, height=height, fps=30, capture_width=640, capture_height=480)
 
 if pyfakewebcam is not None and args.fake_cam:
     fake_cam = pyfakewebcam.FakeWebcam("/dev/video1", cam.width, cam.height)
