@@ -95,7 +95,7 @@ parser.add_argument(
 parser.add_argument(
     "--precision", type=str, default="float32", choices=["float32", "float16"]
 )
-parser.add_argument("--quality", help="jpeg quality", type=int, default=90)
+parser.add_argument("--quality", help="jpeg quality", type=int, default=95)
 args = parser.parse_args()
 
 

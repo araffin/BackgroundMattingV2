@@ -14,11 +14,12 @@
 - reduce delay?
 - install vs code / open ssh / ssh copy id / fuzzy finder / git status / ntop ntpupdate
 - jetson camera package
-- jetson_clock and fan on
+- jetson_clocks and fan on (`sudo jetson_clocks`, `sudo jetson_clocks --fan`)
 - changed from jetcam to nanocamera
 - try picamera faster fps (smaller FoV)
+- fixed lag image jpeg encoding and imagezmq
 
 TODO:
-- fix lag
+- fix lag on the device
 - try optimize with different input shape (include square)
-- use udp for streaming cam
+- use more powerful DC adapter
