@@ -15,15 +15,16 @@ parser.add_argument(
     metavar=("width", "height"),
     default=(1280 // 2, 720 // 2),
 )
+parser.add_argument("--quality", helo="jpeg quality", type=int, default=95)
 args = parser.parse_args()
 
 # Accept connections on all tcp addresses, port 5555
 sender = imagezmq.ImageSender(connect_to="tcp://*:5555", REQ_REP=False)
 
 
-sender_name = socket.gethostname()  # send RPi hostname with each image
+sender_name = socket.gethostname()  # send hostname with each image
 width, height = args.resolution
-jpeg_quality = 95  # 0 to 100, higher is better quality
+jpeg_quality = args.quality  # 0 to 100, higher is better quality
 cam = nano.Camera(flip=0, width=width, height=height, fps=30)
 
 while True:  # send images until Ctrl-C
