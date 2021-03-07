@@ -15,7 +15,7 @@ parser.add_argument(
     metavar=("width", "height"),
     default=(1280 // 2, 720 // 2),
 )
-parser.add_argument("--quality", help="jpeg quality", type=int, default=95)
+parser.add_argument("--quality", help="jpeg quality", type=int, default=90)
 args = parser.parse_args()
 
 # Accept connections on all tcp addresses, port 5555

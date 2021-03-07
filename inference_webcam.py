@@ -15,20 +15,18 @@ Example:
 
 """
 
-import argparse, os, shutil, time
+import argparse
+import time
+import socket
+from threading import Lock, Thread
+
 import cv2
-import torch
-
+import imagezmq
 import numpy as np
-from torch import nn
-from torch.utils.data import DataLoader
-from torchvision.transforms import Compose, ToTensor, Resize
-from torchvision.transforms.functional import to_pil_image
-from threading import Thread, Lock
-from tqdm import tqdm
+import torch
 from PIL import Image
+from torchvision.transforms import ToTensor
 
-from dataset import VideoDataset
 from model import MattingBase, MattingRefine
 
 try:
@@ -46,7 +44,7 @@ except ImportError:
 
 
 try:
-    from torch2trt import torch2trt, TRTModule
+    from torch2trt import TRTModule, torch2trt
 except ImportError:
     torch2trt = None
 
@@ -88,6 +86,7 @@ parser.add_argument(
 )
 
 parser.add_argument("--fake-cam", action="store_true")
+parser.add_argument("--stream", action="store_true")
 parser.add_argument("--optimize-trt", action="store_true")
 parser.add_argument("--hide-fps", action="store_true")
 parser.add_argument(
@@ -96,7 +95,7 @@ parser.add_argument(
 parser.add_argument(
     "--precision", type=str, default="float32", choices=["float32", "float16"]
 )
-
+parser.add_argument("--quality", help="jpeg quality", type=int, default=90)
 args = parser.parse_args()
 
 
@@ -168,6 +167,9 @@ class Displayer:
         self.show_info = show_info
         self.fps_tracker = FPSTracker()
         self.fake_cam = None
+        self.sender = None
+        self.sender_name = None
+        self.jpeg_quality = 90
         cv2.namedWindow(self.title, cv2.WINDOW_NORMAL)
         if width is not None and height is not None:
             cv2.resizeWindow(self.title, width, height)
@@ -184,6 +186,14 @@ class Displayer:
             image_web = np.ascontiguousarray(image, dtype=np.uint8)
             image_web = cv2.cvtColor(image_web, cv2.COLOR_RGB2BGR)
             self.fake_cam.schedule_frame(image_web)
+
+        if self.sender is not None:
+            ret_code, jpg_buffer = cv2.imencode(
+                ".jpg", image, [int(cv2.IMWRITE_JPEG_QUALITY), self.jpeg_quality]
+            )
+            jpg_buffer = jpg_buffer.tobytes()
+            _ = self.sender.send_jpg(self.sender_name, jpg_buffer)
+
         cv2.imshow(self.title, image)
         return cv2.waitKey(1) & 0xFF
 
@@ -238,7 +248,14 @@ if nano is None:
     cam = Camera(width=width, height=height)
 else:
     # See https://picamera.readthedocs.io/en/release-1.13/fov.html
-    cam = nano.Camera(flip=0, width=width, height=height, fps=30, capture_width=640, capture_height=480)
+    cam = nano.Camera(
+        flip=0,
+        width=width,
+        height=height,
+        fps=30,
+        capture_width=640,
+        capture_height=480,
+    )
 
 if pyfakewebcam is not None and args.fake_cam:
     fake_cam = pyfakewebcam.FakeWebcam("/dev/video1", cam.width, cam.height)
@@ -247,6 +264,11 @@ else:
 
 dsp = Displayer("MattingV2", cam.width, cam.height, show_info=(not args.hide_fps))
 dsp.fake_cam = fake_cam
+
+if args.stream:
+    dsp.sender = imagezmq.ImageSender(connect_to="tcp://*:5555", REQ_REP=False)
+    dsp.sender_name = socket.gethostname()  # send hostname with each image
+    dsp.jpeg_quality = args.quality  # 0 to 100, higher is better quality
 
 
 def cv2_frame_to_cuda(frame):
